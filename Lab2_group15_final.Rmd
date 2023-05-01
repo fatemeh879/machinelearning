@@ -1,0 +1,625 @@
+---
+title: "Lab2_group15"
+author: "Mahnaz Mohammadzamani, Bita Tarfiee, Fatemeh sharifiasl"
+date: "2022-12-04"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Collaboration: 
+
+Assignment1:  mainly contributed by Mahnaz Mohammadzamani
+
+Assignment2:  mainly contributed by Fatemeh Sharifee
+
+Assignment3:  mainly contributed by Bita Tarfiee
+
+## Assignment 1. Explicit regularization
+
+### 1.1)
+```{r}
+#setwd("C:/Users/lenovo/Desktop/Machine learning course doc/Lab final/Lab2")
+#read dataframe
+
+df=read.csv('tecator.csv')
+#head(df)
+set.seed(12345)
+#deviding train and test data(50/50)
+n=dim(df)[1]
+train_row = sample(1:n,floor(n*0.5))
+train=df[train_row,]
+test_row = setdiff(1:n,train_row)
+test=df[test_row,]
+```
+
+```{r}
+#linear regression model, y is fat and x is all channel features
+df1 <- train[2:102]
+model <- lm(Fat~.,df1)
+summary(model)$r.squared
+```
+
+
+### The underlying probabilistic model:
+
+$$Fat\sim Norm(B0+B1*channel1+B2*channel2+...+B100*channel100,\sigma)$$
+
+### fit the linear regression to the training data and estimate the training and test errors:
+
+```{r}
+#prediction values for linear regression model for train data
+pred_train=predict(model,newdata =train )
+#train MSE
+MSE_train=mean((train$Fat-pred_train)^2);MSE_train
+#prediction values for linear regression model for test data
+pred_test=predict(model,newdata =test )
+#test MSE
+MSE_test=mean((test$Fat-pred_test)^2);MSE_test
+```
+
+Based on the result, Train MSE is small but test MSE is very high. It means overfitting the model. when we got the summary of model, adjusted r squared is close to 1 which shows overfitting as well. 
+
+### 1.2)
+
+### The cost function that should be optimized in lasso model:
+
+$$RSS+\lambda * \sum_{j = 1}^{p} |B_{j}| $$
+or equivalently
+$$\frac{1}{215}\sum_{i=1}^{215} (y_{i}-\theta_{0}-chanel_{1j}*\theta_{1}  - \cdots - chanel_{100j}*\theta_{100})+\lambda * \sum_{j = 1}^{100} |\theta_{i}| $$
+
+### 1.3) 
+
+### Fit the LASSO regression model to the training data:
+
+```{r}
+#removing unwanted features
+x=train[,-c(1,102,103,104)]
+y=train[,102]
+library(glmnet)
+#Lasso model
+model_lasso <- glmnet(x,y,family='gaussian',alpha=1)
+#summary(model_lasso)
+```
+
+### plot illustrating how the regression coefficients depend on the log of penalty factor:
+
+```{r echo=FALSE}
+plot(model_lasso,xvar='lambda')
+```
+
+Lasso is regularization technique which is used for feature selection as we can see in above plot By increasing the value of lambda, the number of features is decreasing. For instance in log lambda = 1, only one feature remained.
+
+```{r echo=FALSE}
+plot(model_lasso$lambda,model_lasso$df)
+```
+
+This plot also proves the fact which is mentioned above. By increasing lambda, degree of freedon has decreasing. 
+
+
+### Value of the penalty factor can be chosen if we want to select a model with only three features:
+
+```{r}
+model_lasso$lambda[model_lasso$df==3]
+
+```
+In these three lambda, we have only three features.
+
+### 1.4)
+
+### Ridge regression model:
+
+```{r}
+#ridge model
+model_ridge <- glmnet(x,y,family='gaussian',alpha=0)
+#summary(model_ridge)
+```
+
+```{r echo=FALSE}
+plot(model_ridge,xvar='lambda')
+```
+
+By comparing these two plots we can find out that, lasso model forces some coefficients become zero by increasing the value of lambda while in ridge model as we can see in above plot, coefficient become close to zero not exact zero. 
+So the result of Lasso is more interpretable.
+
+### 1.5)
+
+### cross-validation with default number of folds: 
+
+```{r}
+#cross-validation with default number of folds
+cross_validation <- cv.glmnet(as.matrix(x),as.matrix(y),family='gaussian',alpha=1)
+```
+
+### Present a plot showing the dependence of the CV score on log lambda:
+
+By Taking look at cross validation plot we can see that by increasing the value of lambda number of features decreases.
+As we can see when log lambda is almost -1, MSE starts an exponential increasing trend. It shows that, important features are removing. All in all, the min value of MSE would be our optimal value of lambda.(As we calculated in below)
+
+```{r}
+plot(cross_validation)
+```
+
+
+### Optimal value of lambda:
+```{r echo=FALSE}
+#optimal value of lambda
+optim_lambda=cross_validation$lambda.min
+cat('The optimal value of lambda:',optim_lambda)
+```
+
+### The value of log lambda is as below:
+
+```{r echo=FALSE}
+cat('log lambda optimal:',log(cross_validation$lambda.min))
+```
+
+and by taking a closer look to the value of lambda , we see that it is between two dashed-lines in the graph and it related to 8 features.
+
+
+Log lambda -4 has higher MSE comparing with our optimal log lambda. So our prediction has better value than log lamda -4.
+
+### Fitting Lasso model with optimal value of lambda:
+
+```{r}
+#fitting Lasso model with optimal lambda
+model_lasso_optim <- glmnet(x,y,family='gaussian',alpha=1,lambda =optim_lambda )
+#predicted test values
+predicted_test_optim <- predict(model_lasso_optim,newx = as.matrix(test[,-c(1,102,103,104)]),type = 'response')
+#calculate MSE for test data
+MSE_test_optim <- mean((test[,102]-predicted_test_optim)^2)
+cat('MSE with optim lambda:',MSE_test_optim)
+```
+
+Based on MSE_test_optim, we can see that how this Lasso model with optim lambda is better predict test datacomparing with linear model.
+
+
+### scatter plot of the original test versus predicted test values for the model corresponding to optimal lambda:
+
+```{r echo=FALSE}
+#scatter plot of the original test versus predicted test values for the model corresponding to optimal lambda
+plot(predicted_test_optim,test[,102])
+abline(0,1,col='red')
+```
+
+
+```{r echo=FALSE}
+#plot of the original test and predicted test values for the model corresponding to optimal lambda 
+plot(predicted_test_optim)
+points(test[,102],col='red')
+```
+
+From these two plots we can see model prediction of this model is almost good and predicted value amlost follows actual value in most indexes.
+
+
+## assignment 2. Decision trees and logistic regression for bank marketing
+### 2.1 import the data
+```{r }
+library(rpart)
+library(tree)
+library(dplyr)
+library(tidyr)
+library(caret)
+library(tidyverse)
+# reading data set
+bank <- read.csv("bank-full.csv",stringsAsFactors = TRUE, sep=";")
+
+bank1<- bank %>% select(!duration)
+
+# dividing data
+n=dim(bank1)[1]
+set.seed(12345)
+id=sample(1:n, floor(n*0.4))
+train=bank1[id,]
+id1=setdiff(1:n, id)
+set.seed(12345)
+id2=sample(id1, floor(n*0.3))
+valid=bank1[id2,]
+id3=setdiff(id1,id2)
+test=bank1[id3,]
+```
+### 2.2 fit decision trees
+```{r echo=FALSE}
+tree0=tree(as.factor(y)~., data=train)
+tree1=tree(as.factor(y)~., data=train,  minsize = 7000)
+tree2=tree(as.factor(y)~., data=train,  mindev = 0.0005)
+#summary(tree0)
+#summary(tree1)
+#summary(tree2)
+plot(tree0)
+text(tree0)
+plot(tree1)
+text(tree1)
+plot(tree2)
+text(tree2)
+```
+
+### report the misclassification rates for the training and validation data
+
+```{r echo=FALSE}
+# misclassification for the first model :
+#train data
+predicttrain0=predict(tree0,newdata = train,type = "class")
+#summary(predicttrain0)
+a=table(predicted=predicttrain0,actual=train$y)
+
+cat(" missclassification rate for train data(default setting):")
+misclass_train=1-sum(diag(a))/sum(a)
+misclass_train
+# validation data
+predictvalid0=predict(tree0,newdata = valid,type = "class")
+#summary(predictvalid0)
+b=table(predicted=predictvalid0,actual=valid$y)
+cat(" missclassification rate for validation data(default setting):")
+misclass_valid=1-sum(diag(b))/sum(b)
+misclass_valid
+
+# misclassification for the 2nd model :
+#train data
+predicttrain1=predict(tree1,newdata = train,type = "class")
+#summary(predicttrain1)
+a1=table(predicted=predicttrain1,actual=train$y)
+cat(" missclassification rate for train data(node size7000):")
+misclass_train=1-sum(diag(a1))/sum(a1)
+misclass_train
+# validation data
+predictvalid1=predict(tree1,newdata = valid,type = "class")
+#summary(predictvalid1)
+b1=table(predicted=predictvalid1,actual=valid$y)
+cat(" missclassification rate for validation data(node size7000):")
+misclass_valid=1-sum(diag(b1))/sum(b1)
+misclass_valid
+
+#misclassification for third model:
+# train data
+predicttrain2=predict(tree2, newdata=train , type="class")
+#summary(predicttrain2)
+a2=table(predicted=predicttrain2,actual=train$y)
+cat(" missclassification rate for train data(minimum deviance):")
+misclass_train=1-sum(diag(a2))/sum(a2)
+misclass_train
+#validation data
+predictvalid2=predict(tree2, newdata=valid , type="class")
+#summary(predictvalid2)
+b2=table(predicted=predictvalid2,actual=valid$y)
+cat(" missclassification rate for validation data(minimum deviance):")
+misclass_train=1-sum(diag(b2))/sum(b2)
+misclass_train
+```
+
+
+## Which model is the best one among these three? 
+the first two trees have the same results and both have the smallest misclass error
+for validation data so they are best models. as the third one has less train error
+but more valid error so this is not better than others.
+
+## Report how changing the deviance and node size affected the size of the trees and explain why?
+setting the minsize reduces the terminal nodes and as we can see from the plots the first tree has more teminal nodes than the second. if the number of observations are less than 7000 so the node becames the terminal node.
+minimum amount of nodes we can have which does not make a big affect because the default tree has more that 7000 nodes. The min size attributed defines the least number of observations needed for a the next split. if that is not met current node will become the terminal node.
+setting the mindev to .0005 increases the tree size 
+in fact mindev determines how much a potential node must reduce the error  to grow a new node. The default value is .01.when we set smaller dev we let the tree grow more because we let the tree grow more wiht this small deviance which leads to overfitting.
+
+### 2.3
+```{r echo=FALSE}
+trainScore=rep(0,50)
+validScore=rep(0,50)
+for(i in 2:50) {
+  prunedTree=prune.tree(tree2,best=i)
+  predvalid=predict(prunedTree, newdata=valid,
+               type="tree")
+  predtrain=predict(prunedTree, newdata=train,
+                    type="tree")
+  trainScore[i]=deviance(predtrain)
+  validScore[i]=deviance(predvalid)
+}
+```
+
+```{r,echo=FALSE}
+cat("Present a graph of the dependence of deviances for the training and the
+validation data","\n")
+plot(2:50, trainScore[2:50], type="b", col="red",
+     ylim=c(8000,13000))
+points(2:50, validScore[2:50], type="b", col="blue")
+
+```
+```{r,echo=FALSE}
+cat("***interpret this graph in terms of bias-variance tradeoff: ","\n","when the number of leave increases the model complexity increases  and leads to 
+smaller training error and bigger valid error.(less bias,more variance and overfitting)","\n")
+# min(trainScore[2:50])
+# which.min(trainScore[2:50])
+# cat("***Report the optimal amount of leaves and which variables seem to be
+# most important for decision making in this tree: ","\n")
+```
+```{r,echo=FALSE}
+cat("optimal amount of leaves: ",which.min(validScore[2:50]),"\n")
+#optimleaves=which.min(validScore[2:50])
+#cat("optimal amount of leaves: ",optimleaves)
+```
+```{r,echo=FALSE}
+finalTree=prune.tree(tree2, best=21)
+Yfit=predict(finalTree, newdata=valid, type="class")
+
+summary(finalTree)
+```
+```{r,echo=FALSE}
+cat("***Most important variables are as folowing :","\n",
+"poutcome, month, contact, pdays, age, day, balance, housing","\n")
+```
+```{r,echo=FALSE}
+cat("***Interpret the information provided by the tree structure:","\n",
+"we find out the most of the outputs are ,NO,in the left side of the tree,
+no matter which variable is taken.")
+
+```
+### 2.4
+```{r echo=FALSE}
+testpred=predict(finalTree, newdata=test,type="class")
+testconfusionM=table(actual=test$y,testpred)
+
+tn=testconfusionM[1,1]
+tp=testconfusionM[2,2]
+fn=testconfusionM[2,1]
+fp=testconfusionM[1,2]
+# diag(testconfusionM)
+# sum(testconfusionM)
+precision= tp/(tp+fp)
+recall=tp/(tp+fn)
+f1score=2*precision*recall/(recall+precision)
+accuracy=(tn+tp)/sum(testconfusionM)
+cat(" confusion matrix is :","\n")
+testconfusionM
+cat("F1score is",f1score,"\n","Accuracy is:",accuracy)
+
+```
+
+For imbalanced problems, where the negative class y = -1 is the most common
+class, the F1 score is therefore preferable to the misclassification rate (or accuracy).
+The F1 score summarises the precision and recall by their harmonic means, 
+which is a number between zero and one (higher is better).so here f1score is low and
+can say that the model has not good predictive power.
+
+### 2.5
+```{r echo=FALSE}
+prob=predict(finalTree ,newdata=test)
+probno=prob[,1]
+probyes=1 - probno
+pred=ifelse((probno/probyes)>5,"no","yes")
+confusmat=table(test$y,pred)
+cat("confusion matrix is","\n")
+confusmat
+tn=confusmat[1,1]
+tp=confusmat[2,2]
+fn=confusmat[2,1]
+fp=confusmat[1,2]
+precision= tp/(tp+fp)
+recall=tp/(tp+fn)
+f1score=2*precision*recall/(recall+precision)
+accuracy=(tn+tp)/sum(testconfusionM)
+cat("F1score is",f1score,"\n","Accuracy is:",accuracy)
+
+```
+with this loss matrix we penalize the false positive and therefore f1score increases
+which means that the prediction is better than the previous one by defining loss matrix.
+
+### 2.6
+```{r echo=FALSE}
+tpr=c()
+fpr=c()
+p= seq(0.05,0.95,0.05)
+
+
+for (i in 1:20) {
+  prob=predict(finalTree ,newdata=test)
+  probno=prob[,1]
+  probyes=1 - probno
+  pred=ifelse(probyes>p[i],"yes","no")
+  confusionmat=table(test$y,factor(pred,levels = c("no","yes")))
+  #print(confusionmat)
+  tpr[i]=confusionmat[2,2]/sum(confusionmat[2,])
+  fpr[i]=confusionmat[1,2]/sum(confusionmat[1,])
+                              
+}
+
+logregmodel=glm(train$y~., data=train, family="binomial")
+logtpr=c()
+logfpr=c()
+for (i in 1:20){
+  
+  logProb=predict(logregmodel, newdata=test, type="response")
+  # logProbno=1-logProbyes
+  logPred=ifelse(logProb> p[i], "yes", "no")
+  logconfusionmat=table(test$y, factor(logPred,levels=c("no","yes")))
+  logtpr[i]=logconfusionmat[2,2]/sum(logconfusionmat[2,])
+  logfpr[i]=logconfusionmat[1,2]/sum(logconfusionmat[1,])
+}
+
+library(ggplot2)
+
+df <- data.frame(tprtree=tpr,fprtree=fpr,tprlm=logtpr,fprlm=logfpr)
+#ROC plot for the tree
+ggplot(data=df)+
+  geom_line(mapping=aes(fpr,tpr), color = "red",  linewidth = 1, alpha = 0.5)+
+   geom_line(mapping=aes(logfpr, logtpr), color = "green", linewidth = 1, alpha = 0.5)
+
+
+```
+coclusion: greater area under ROC curve shows the best classifier.in this case the area of tree classifier is a bit greater than logistic reg.the ideal classifier is to fit the left corner.
+the precision-recall curve is better for this example because it is an imbalanced problem.
+
+
+## Assignment 3. Principal components and implicit regularization
+### Assignment 3 part 1:
+In this assignment we use eigen() function to find PCA 
+
+#### Data Processing:
+##### Data processing scaling all variable except of ViolentCrimesPerPop\
+
+```{r echo=FALSE}
+#Question3lab2
+#loading data
+library(caret)
+library(ggplot2)
+#library(spate)
+library(plyr)
+#data processing
+#...........................
+#reading Data
+
+data_orginal<-read.csv("communities.csv")
+#extarcting ViolentCrimesPerPop to scale other data
+scaler=preProcess(data_orginal[,1:100])
+data_scale<-predict(scaler,data_orginal[,1:100])
+
+```
+
+#### implement PCA by using function eigen()
+#### how many components are needed to obtain at least 95% of variance in the data
+```{r echo=TRUE}
+#Implement PCA by eigen
+data_cov<-cov(data_scale)
+Eigen_data<-eigen(data_cov)
+Eigen_value<-Eigen_data$values
+Eigen_vector<-Eigen_data$vectors
+#95% of variance in the data
+Eigen_Vpercent<-Eigen_value/sum(Eigen_value)
+Percent<-cumsum(Eigen_Vpercent)
+p<-which(Percent>=.95)
+plot(Percent, xlab = "number of components",ylab = "sum of variane")
+abline(h = .95)
+abline(v=p[1])
+paste("components are needed to obtain at least 95% of variance in the data:",p[1])
+```
+
+#### The proportion of variation explained by each of the first two principal components?
+```{r echo=FALSE}
+paste(" the proportion of variation explained by PC1:",Eigen_Vpercent[1])
+paste(" the proportion of variation explained by PC1:",Eigen_Vpercent[2])
+```
+
+### PCA analysis by using princomp 
+Doing PCA analysis and make a trace plot of first component:and here we can see that many features contribute in PCA1
+
+```{r echo=FALSE}
+#part2 
+PCA_princomp<-princomp(data_scale)
+U<-PCA_princomp$loadings
+plot(U[,1], main="Traceplot, PC1")
+```
+
+Make a trace plot of first component in decreasing manner:
+
+```{r echo=FALSE}
+#part2 
+U1<-sort(U[,1],decreasing = TRUE)
+plot(U1, main="Traceplot, PC1")
+```
+
+finding 5 features that contribute mostlt to PCA1 and plot the barplot:
+We can see that most of these feature related to income and family financial condition
+First Five feature:
+
+```{r echo=FALSE}
+U2<-sort(abs(U[,1]),decreasing = TRUE)
+U2[1:5]
+
+```
+
+plot of the PC scores in the coordinates (PC1, PC2) in which the color of the points is given by ViolentCrimesPerPop.
+
+```{r echo=FALSE}
+
+PC1_s<-PCA_princomp$scores[,1]
+PC2_s<-PCA_princomp$scores[,2]
+
+Scores<-data.frame(PC1=PC1_s,PC2=PC2_s,data=data_orginal$ViolentCrimesPerPop)
+ggplot(Scores,aes(x=PC1,y=PC2))+geom_point(aes(color=data))
+                                                         
+```
+x_axis tells us what percentage of variation in the original data that 
+pc1 acounts for and we can see that pc1 has the most variance from -10 to 15 and the 
+main affect of 25% on the crime level whereas pc2 has 17% influence.
+
+
+###  estimate a linear regression model
+split the original data into train and test [50/50] and scale features and response
+Estimate Linear Regression method by lm() function
+MSE for test and train data is reported
+
+
+```{r echo=FALSE}
+#part3
+set.seed(12345)
+data<-data_orginal
+n=nrow(data)
+id=sample(1:n, floor(n*0.5))
+train=data[id,]
+test=data[-id,]
+library(caret)
+scaler=preProcess(train)
+trainS=predict(scaler,train)
+testS=predict(scaler,test)
+fit=lm(ViolentCrimesPerPop~.,data=trainS)
+#summary(fit)                                  
+y_train<-fit$fitted.values                                  
+y_test<-predict(fit,testS)
+
+MSE_train=mean((trainS$ViolentCrimesPerPop-y_train)^2)
+paste("MSE for train data=",MSE_train)
+MSE_test=mean((testS$ViolentCrimesPerPop-y_test)^2)
+paste("MSE for test data=",MSE_test)
+```
+we can see that MSE for train is less than MSE for test which is reasonable
+also the test data MSe is .42 which shows that model works good
+
+###  Implement a  cost function
+
+4. Implement a function that depends on parameter vector teta and represents the cost function for linear regression without intercept on the training data set. Afterwards, use BFGS method (optim() function without gradient specified)
+to optimize this cost with starting point teta0=0 and compute training and test errors for every iteration number.  compare them with results in step 3 and make conclusions.
+
+```{r echo=FALSE}
+xtrain<- as.matrix(trainS[1:100])
+ytrain<-as.matrix(trainS[101])
+xtest<-as.matrix(testS[1:100])
+ytest<-as.matrix(testS[101])
+TestE=list()
+TrainE=list()
+k=0
+costfunction<- function(theta){
+  n <- dim(xtrain)[1]
+  cost<- (1/n)*(sum((ytrain-xtrain%*%theta)^2))
+  MSE_train=mean((ytrain-xtrain%*%theta )^2)
+  MSE_test=mean((ytest-xtest%*%theta)^2)
+  .GlobalEnv$k= .GlobalEnv$k+1
+  .GlobalEnv$TrainE[[k]]=MSE_train
+  .GlobalEnv$TestE[[k]]=MSE_test
+  return(cost)
+  
+}
+res=optim(c(rep(0,100)), fn=costfunction,  method="BFGS")
+
+
+#cat("the optimal itteration is:","\n",which.min(TestE),"\n","with the error of:","\n",min(as.numeric(TestE)))
+#cat("the optimal itteration is:","\n",which.min(TrainE),"\n","with the error of:","\n",min(as.numeric(TrainE)))
+#comparing the result of these 2 methods, we can see that in question 3 we get 
+# 42% test error and in quetion 4 we get 40% test error wich is smaller than question 3.
+# the reason is that by early stopping we can have an improvement and then error decrease a bit.
+```
+
+Present a plot showing dependence of both errors on the iteration number and comment which iteration number is optimal according to the early stopping criterion. Compute the training and test error in the optimal model:
+
+```{r echo=FALSE}
+plot(as.numeric(TrainE), type="l", col="blue", ylim=c(0,1), xlim=c(500,20000),ylab="Error")
+points(as.numeric(TestE), type="l", col="red")
+```
+
+optimal iteration number:
+```{r echo=FALSE}
+cat("the optimal itteration is:","\n",which.min(TestE),"\n","with the error of:","\n", min(as.numeric(TestE)))
+```
+ As we expected we see that test error in part 4 is .40 and less than in part 3 (.42) because we use optimization to find the best theta. in fact by early stopping we can have an improvement and then error decrease a bit.
+ 
+## Apendix
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
